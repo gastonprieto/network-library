@@ -10,16 +10,20 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 
+static addr_info* addr_create(char* ip, int port);
+
+t_socket socket_create() {
+    return socket(AF_INET, SOCK_STREAM, 0);
+}
+
 t_socket socket_connect_to(char* ip, int port) {
-    t_socket sock = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in addr;
-    addr.sin_addr.s_addr = inet_addr(ip);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    connect(sock, (struct sockaddr*) &addr, sizeof(addr));
+    t_socket sock = socket_create();
+    addr_info* addr = addr_create(ip, port); 
+    connect(sock, (struct sockaddr*) addr, sizeof(addr_info));
+    free(addr);
+    
     return sock;
 }
 
@@ -31,10 +35,42 @@ void socket_send(t_socket sock, uint8_t type, void* data, void* (*serializer_ele
     send(sock, stream, nipc_serialize_size(nipc), 0);
     
     nipc_destroy(nipc);
-    free(data_serialized);
     free(stream);
 }
 
+void* socket_recv(t_socket socket, void* (*unserializer_element) (void*)) {
+    t_nipc* nipc = nipc_create_only_header();
+    recv(socket, nipc, nipc_size_header(), MSG_WAITALL);
+    nipc->payload = calloc(nipc->length, 1);
+    recv(socket, nipc->payload, nipc->length, MSG_WAITALL);
+    
+    void* element = unserializer_element(nipc->payload);
+    
+    nipc_destroy(nipc);
+    return element;
+}
+
 t_socket socket_listen_in(char* ip, int port) {
-    return 0;
+    t_socket sock = socket_create();
+    addr_info* addr = addr_create(ip, port);
+    bind(sock, (struct sockaddr*) addr, sizeof(addr_info));
+    listen(sock, 100);
+    free(addr);
+    return sock;
+}
+
+t_socket socket_accept(t_socket server_socket) {
+    return accept(server_socket, NULL, 0);
+}
+
+/***************************************
+ * PRIVATE FUNCTIONS 
+ ***************************************/
+
+addr_info* addr_create(char* ip, int port) {
+    addr_info* addr = calloc(1, sizeof(addr_info));
+    addr->sin_addr.s_addr = inet_addr(ip);
+    addr->sin_family = AF_INET;
+    addr->sin_port = htons(port);
+    return addr;
 }

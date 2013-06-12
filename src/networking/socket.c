@@ -27,8 +27,8 @@ void socket_send(t_socket sock, uint8_t type, void* data, void* (*serializer_ele
     uint32_t length;
     void* data_serialized = serializer_element(data, &length);
     t_nipc* nipc = nipc_create(type, length, data_serialized);
-    void* stream = serialize_nipc(nipc);
-    send(sock, stream, serialize_size_stream(nipc), 0);
+    void* stream = nipc_serialize(nipc);
+    send(sock, stream, nipc_serialize_size(nipc), 0);
     
     nipc_destroy(nipc);
     free(data_serialized);

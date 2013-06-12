@@ -14,35 +14,37 @@
 
 static addr_info* addr_create(char* ip, int port);
 
-t_socket socket_create() {
-    return socket(AF_INET, SOCK_STREAM, 0);
+t_socket* socket_create() {
+    t_socket* sock = calloc(1, sizeof(t_socket));
+    sock->socket = socket(AF_INET, SOCK_STREAM, 0);
+    return sock;
 }
 
-t_socket socket_connect_to(char* ip, int port) {
-    t_socket sock = socket_create();
+t_socket* socket_connect_to(char* ip, int port) {
+    t_socket* sock = socket_create();
     addr_info* addr = addr_create(ip, port); 
-    connect(sock, (struct sockaddr*) addr, sizeof(addr_info));
+    connect(sock->socket, (struct sockaddr*) addr, sizeof(addr_info));
     free(addr);
     
     return sock;
 }
 
-void socket_send(t_socket sock, uint8_t type, void* data, void* (*serializer_element)(void *, uint32_t *) ) {
+void socket_send(t_socket* sock, uint8_t type, void* data, void* (*serializer_element)(void *, uint32_t *) ) {
     uint32_t length;
     void* data_serialized = serializer_element(data, &length);
     t_nipc* nipc = nipc_create(type, length, data_serialized);
     void* stream = nipc_serialize(nipc);
-    send(sock, stream, nipc_serialize_size(nipc), 0);
+    send(sock->socket, stream, nipc_serialize_size(nipc), 0);
     
     nipc_destroy(nipc);
     free(stream);
 }
 
-void* socket_recv(t_socket socket, void* (*unserializer_element) (void*)) {
+void* socket_recv(t_socket* socket, void* (*unserializer_element) (void*)) {
     t_nipc* nipc = nipc_create_only_header();
-    recv(socket, nipc, nipc_size_header(), MSG_WAITALL);
+    recv(socket->socket, nipc, nipc_size_header(), MSG_WAITALL);
     nipc->payload = calloc(nipc->length, 1);
-    recv(socket, nipc->payload, nipc->length, MSG_WAITALL);
+    recv(socket->socket, nipc->payload, nipc->length, MSG_WAITALL);
     
     void* element = unserializer_element(nipc->payload);
     
@@ -50,17 +52,19 @@ void* socket_recv(t_socket socket, void* (*unserializer_element) (void*)) {
     return element;
 }
 
-t_socket socket_listen_in(char* ip, int port) {
-    t_socket sock = socket_create();
+t_socket* socket_listen_in(char* ip, int port) {
+    t_socket* sock = socket_create();
     addr_info* addr = addr_create(ip, port);
-    bind(sock, (struct sockaddr*) addr, sizeof(addr_info));
-    listen(sock, 100);
+    bind(sock->socket, (struct sockaddr*) addr, sizeof(addr_info));
+    listen(sock->socket, 100);
     free(addr);
     return sock;
 }
 
-t_socket socket_accept(t_socket server_socket) {
-    return accept(server_socket, NULL, 0);
+t_socket* socket_accept(t_socket* server_socket) {
+    t_socket* sock = socket_create();
+    sock->socket = accept(server_socket->socket, NULL, 0);
+    return sock;
 }
 
 /***************************************

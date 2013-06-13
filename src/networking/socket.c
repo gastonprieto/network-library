@@ -8,9 +8,13 @@
 #include "socket.h"
 
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <stdio.h>
 #include <arpa/inet.h>
+#include <sys/epoll.h>
 
 static addr_info* addr_create(char* ip, int port);
 
@@ -65,6 +69,41 @@ t_socket* socket_accept(t_socket* server_socket) {
     t_socket* sock = socket_create();
     sock->socket = accept(server_socket->socket, NULL, 0);
     return sock;
+}
+
+void socket_multiplex(t_list* sockets) {
+    struct epoll_event events[list_size(sockets)];
+    int epollfd = epoll_create(list_size(sockets));
+    
+    void _add_elements(t_socket* socket) {
+        struct epoll_event ev;
+        ev.events = EPOLLIN | EPOLLRDHUP;
+        ev.data.fd = socket->socket;
+        epoll_ctl(epollfd, EPOLL_CTL_ADD, socket->socket, &ev);
+    }
+
+    list_iterate(sockets, (void*) _add_elements);
+    
+    int nfds = epoll_wait(epollfd, events, list_size(sockets), -1);
+    for (int i = 0; i < nfds; ++i) {
+        int sock_epoll = events[i].data.fd;
+        uint32_t event = events[i].events;
+        bool _search_by_socket(t_socket* socket) {
+            return sock_epoll == socket->socket;
+        }
+        if (event & EPOLLRDHUP) {
+            t_socket* sock_found = list_remove_by_condition(sockets, (void*) _search_by_socket);
+            if (sock_found->handler_closed != NULL) {
+                sock_found->handler_closed(sock_found);
+            }
+            free(sock_found);
+        } else if (event & EPOLLIN) {
+            t_socket* sock_found = list_find(sockets, (void*) _search_by_socket);
+            sock_found->handler(sock_found);
+        }
+    }
+    
+    close(epollfd);
 }
 
 /***************************************

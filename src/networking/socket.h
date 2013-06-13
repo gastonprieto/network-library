@@ -10,10 +10,12 @@
 
 #include "nipc.h"
 #include <netinet/in.h>
+#include <commons/collections/list.h>
 
 struct sock_struct {
     int socket;
     void (*handler) (struct sock_struct*);
+    void (*handler_closed) (struct sock_struct*);
 };
 typedef struct sock_struct t_socket;
 
@@ -25,6 +27,7 @@ t_socket* socket_connect_to(char* ip, int port);
 // Server Functions
 t_socket* socket_listen_in(char* ip, int port);
 t_socket* socket_accept(t_socket* server_socket);
+void socket_multiplex(t_list* sockets);
 
 
 void* socket_recv(t_socket* socket, void* (*unserializer_element) (void*));
